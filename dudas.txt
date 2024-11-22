@@ -1,0 +1,7 @@
+Preguntar al profe:
+1) estilo buscador de articulos linea 286
+2) recargar tabla treeview
+
+Siguientes cosas a hacer:
+1) agregar a carrtio
+2) zona de ventas y pdf con factura
