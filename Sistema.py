@@ -2,22 +2,31 @@ from Libraries.validaciones import *
 from tkinter import *
 from tkinter import messagebox
 from tkinter import ttk
+from tkinter import StringVar
 import sqlite3
 import random
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+from reportlab.platypus import tables
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+import sys
+import os
 import time
 from datetime import datetime
+
 #pillow(imagenes)
 #reportlab(pdfs)
 #cerberus(validaciones)
 NOMBRE_PROGRAMA = "Electro A"
-carrito = []
 conexion = sqlite3.connect("BaseElectroA.db")
+total_venta = 0
+carrito = []
+numero_factura = 0
 
 #Paleta Colores 1
 Naranja_intenso= '#FF6F00'
-Gris_oscuro_con_tono_anaranjado= '#5D4037'
+marron= '#5D4037'
 Arena_clara= '#D7CCC8'
 Beige_neutro= '#A1887F'
 Gris_cálido_neutro= '#B0BEC5'
@@ -52,10 +61,12 @@ def misEstilos():
 	estilos.configure('carrito.Treeview', rowheight=100)
 	#Tabla de articulos
 	estilos.configure("tabla.Treeview",background=gris_claro,foreground="snow",font=("Calibri",11),fieldbackground=gris_claro,)
+	estilos.configure("tabla_carrito.Treeview",background=gris_claro,foreground="snow",font=("Calibri",11),fieldbackground=gris_claro,maxwidth=400,)
 	estilos.configure('tabla.Treeview.Heading', background=color_navegacion,foreground= "snow",font = ("Calibri",12),)
 	estilos.map('tabla.Treeview.Heading', background=[('selected', color_fondo),('active', color_fondo)])
-	#Buscador
-	# estilos.configure('buscador.Entrey',background=Gris_cálido_neutro)
+	#Pruebas
+	estilos.configure('pruebas.TFrame',background="blue",relief=FLAT,border=0)
+	
 
 	return estilos
 
@@ -164,8 +175,21 @@ def inicio(frame_contenido):
 	label_profe = ttk.Label(frame_inicio,text="Creado por el profe",style='entradas.TLabel')
 	label_profe.pack(side=BOTTOM)
 
+def cargar_articulos_global(tabla_treeview):
+		tabla = conexion.cursor()
+		tabla.execute("SELECT * FROM articulos ")
+		datos = tabla.fetchall()
+		for dato in datos:
+			id_categoria = (dato[1],)
+			tabla.execute("SELECT nombre FROM categorias WHERE id=?",id_categoria)
+			datos_categorias = tabla.fetchall()
+			nombre_categoria=datos_categorias[0][0]
+			precio = "$"+str(dato[4])
+			tabla_articulos.insert("",END,text=dato[0],values=(dato[2],nombre_categoria,dato[3],precio))
+		tabla.close()
+
 def articulos(frame_contenido):
-	global frame_articulos, Gris_cálido_neutro
+	global frame_articulos, Gris_cálido_neutro, crear_ticket
 	#frames
 	frame_articulos = ttk.Frame(frame_contenido,style='fondo.TFrame')
 	frame_articulos.pack(fill=BOTH,expand=1)
@@ -183,14 +207,7 @@ def articulos(frame_contenido):
 	#Categoria
 	label_categoria = ttk.Label(frame_crud_articulos,text="Categoría",style="entradasCrud.TLabel",anchor=CENTER)
 	label_categoria.pack(anchor=W,padx=10,pady=10)
-	#menus desplegable
-	# opciones_categorias = StringVar()
-	# opciones_categorias.set("Escoge una categoría")
-	# categorias = ('Iluminación','Aceites','Refrigeración')
-	# menu = OptionMenu(frame_crud_articulos, opciones_categorias, *categorias,command=lambda x: seleccionar_opcion(x))
-	# menu.pack(anchor=CENTER,padx=10)
 	entry_categoria = ttk.Entry(frame_crud_articulos,font=("Calibri",15))
-	# entry_categoria.config(state="readonly")
 	entry_categoria.pack(anchor=W,padx=20,fill=X)
 	#Detalle
 	label_detalle = ttk.Label(frame_crud_articulos,text="Detalle",style="entradasCrud.TLabel",anchor=CENTER)
@@ -394,6 +411,7 @@ def articulos(frame_contenido):
 			precio = "$"+str(dato[4])
 			tabla_articulos.insert("",END,text=dato[0],values=(dato[2],nombre_categoria,dato[3],precio))
 		tabla.close()
+
 	cargar_articulos()
 	
 def clientes(frame_contenido):
@@ -474,56 +492,267 @@ def compras(frame_contenido):
 	label_compras = ttk.Label(frame_compras,text="Compras",style='titulo.TLabel')
 	label_compras.pack()
 
+
+
 def ventas(frame_contenido):
 	global frame_ventas
-	frame_ventas = ttk.Frame(frame_contenido,style='fondo.TFrame')
+	frame_ventas = ttk.Frame(frame_contenido,style='transparente.TFrame')
 	frame_ventas.pack(fill=BOTH,expand=1)
-
+	#Frame Encabezado
 	frame_header = ttk.Frame(frame_ventas,style='transparente.TFrame')
 	frame_header.pack(fill=X,ipady=50)
+	#Frame completo
 	frame_body = ttk.Frame(frame_ventas,style='transparente.TFrame')
 	frame_body.pack(fill=BOTH,expand=1)
+	#Frames contenedores de las tablas
+	frame_articulos_ventas = ttk.Frame(frame_body,style='clientes.TFrame')
+	frame_articulos_ventas.pack(side=LEFT,fill=BOTH,expand=1,padx=(20,0),pady=10)
+	frame_carrito = ttk.Frame(frame_body,style='clientes.TFrame')
+	frame_carrito.pack(side=LEFT,fill=Y,ipadx=300,padx=20,pady=10)
+	
+	label_buscador_ventas = ttk.Label(frame_articulos_ventas,text="Buscador",style='entradasCrud.TLabel')
+	label_buscador_ventas.pack(anchor=W,padx=10,pady=(10,0))
+	entry_buscador_ventas = ttk.Entry(frame_articulos_ventas,width=40,font=("Calibri",15))
+	entry_buscador_ventas.pack(anchor=W,padx=10,pady=(0,10))
+	label_carrito_ventas = ttk.Label(frame_carrito,text="Carrito",style='entradasCrud.TLabel')
+	label_carrito_ventas.pack(anchor=CENTER,padx=10,pady=(10,0))
 
-	frame_articulos = ttk.Frame(frame_body,style='blanco.TFrame')
-	frame_articulos.pack(side=LEFT,fill=BOTH,expand=1,padx=(40,0),pady=10)
-	frame_carrito = ttk.Frame(frame_body,style='blanco.TFrame')
-	frame_carrito.pack(side=LEFT,fill=Y,ipadx=200,padx=40,pady=10)
-	global tabla_carrito
-	tabla_carrito = ttk.Treeview(frame_carrito,style='carrito.Treeview')
-	tabla_carrito.pack(side=TOP,fill=BOTH,expand=1)
-	tabla_carrito["columns"] = ("detalle","precio")
-	tabla_carrito.column("#0",width=100)
-	tabla_carrito.column("detalle",width=200,stretch=False)
-	tabla_carrito.column("precio",width=100,stretch=False)
-	tabla_carrito.heading("#0",text="cantidad")
-	tabla_carrito.heading("detalle",text="detalle")
-	tabla_carrito.heading("precio",text="precio")
-	def vender():
-		for articulo in carrito:
-			print(articulo)
-	boton_vender = Button(frame_carrito,text="Vender",command=vender)
-	boton_vender.pack(side=BOTTOM,pady=10,padx=10)
+	tabla_articulos_ventas = ttk.Treeview(frame_articulos_ventas,style='tabla.Treeview',)
+	tabla_articulos_ventas["columns"] = ("Código", "nombre", "precio", "stock")
+	tabla_articulos_ventas.column("#0", width=0, stretch=NO)
+	tabla_articulos_ventas.column("Código", anchor=W, width=50)
+	tabla_articulos_ventas.column("nombre", anchor=W, width=200)
+	tabla_articulos_ventas.column("precio", anchor=W, width=100)
+	tabla_articulos_ventas.column("stock", anchor=W, width=100)
+	tabla_articulos_ventas.heading("#0", text="", anchor=W)
+	tabla_articulos_ventas.heading("Código", text="Código", anchor=CENTER)
+	tabla_articulos_ventas.heading("nombre", text="Nombre", anchor=CENTER)
+	tabla_articulos_ventas.heading("precio", text="Precio", anchor=CENTER)
+	tabla_articulos_ventas.heading("stock", text="Stock", anchor=CENTER)
+	tabla_articulos_ventas.pack(fill=BOTH, expand=True,padx=10,pady=10)
+
+	tabla_carrito_ventas = ttk.Treeview(frame_carrito,style='tabla.Treeview')
+	tabla_carrito_ventas.pack(side=TOP,fill=BOTH,expand=True,pady=10,padx=10)
+	tabla_carrito_ventas["columns"] = ( "nombre", "precio", "cantidad","Subtotal" )
+	tabla_carrito_ventas.column("#0", width=0, stretch=NO)
+	tabla_carrito_ventas.column("nombre", anchor=W, width=200)
+	tabla_carrito_ventas.column("precio", anchor=W, width=100)
+	tabla_carrito_ventas.column("cantidad", anchor=W, width=50)
+	tabla_carrito_ventas.column("Subtotal", anchor=W, width=50)
+	tabla_carrito_ventas.heading("#0", text="", anchor=W)
+	tabla_carrito_ventas.heading("nombre", text="Nombre", anchor=CENTER)
+	tabla_carrito_ventas.heading("precio", text="Precio", anchor=CENTER)
+	tabla_carrito_ventas.heading("cantidad", text="Cantidad", anchor=CENTER)
+	tabla_carrito_ventas.heading("Subtotal", text="Subtotal", anchor=CENTER)
+
+	#Label y entry articulo seleccionado
+	label_articulo_seleccionado = ttk.Label(frame_articulos_ventas,text="Artículo Seleccionado:",style='entradasCrud.TLabel')
+	label_articulo_seleccionado.pack(side=LEFT,anchor=W,padx=10,pady=10)
+	entry_articulo_seleccionado = ttk.Entry(frame_articulos_ventas,width=40,font=("Calibri",15),state="readonly")
+	entry_articulo_seleccionado.config(state="readonly")
+	entry_articulo_seleccionado.pack(side=LEFT,anchor=W,padx=10,pady=10)
+
+	#Funcion para que se coloque el articulo seleccionado de la tabla en el entry
+	entry_valor_cantidad = Entry(frame_carrito,width=20,font=("Calibri",15))
+	fila= None
+	entry_total = Entry(frame_carrito,width=20,font=("Calibri",15))
+	
+	def seleccionar_articulo_ventas(evento):
+		index = tabla_articulos_ventas.selection()
+		fila=tabla_articulos_ventas.item(index)
+		entry_articulo_seleccionado.config(state="normal")
+		entry_articulo_seleccionado.delete(0,END)
+		entry_articulo_seleccionado.insert(0,fila["values"][1])
+		entry_articulo_seleccionado.config(state="readonly")
+	
+	def borrar_entrys():
+		entry_articulo_seleccionado.config(state="normal")
+		entry_articulo_seleccionado.delete(0,END)
+		entry_articulo_seleccionado.config(state="readonly")
+		entry_valor_cantidad.delete(0,END)
+	#ejecutamos la funcion con evento
+	tabla_articulos_ventas.bind("<<TreeviewSelect>>",seleccionar_articulo_ventas)
+	
+	def determinar_cantidad():
+		global total_venta
+		fila = tabla_articulos_ventas.selection()
+		if fila:
+			fila = tabla_articulos_ventas.item(fila)
+			nombre = fila["values"][1]
+			precio = fila["values"][2].replace("$","")
+			cantidad = entry_valor_cantidad.get()
+			subtotal = int(cantidad) * float(precio)
+			tabla_carrito_ventas.insert("", END, text=nombre, values=(nombre, cantidad, precio, subtotal))
+			total_venta += subtotal
+			carrito.append({
+				"nombre_carrito":nombre,
+				"cantidad_carrito":cantidad,
+				"precio_carrito":precio,
+				"subtotal_carrito":subtotal
+			})
+			print(carrito)
+			borrar_entrys()
+			entry_total.configure(state="normal")
+			entry_total.delete(0,END)
+			entry_total.insert(0,total_venta)
+			entry_total.configure(state="readonly")
+		else:
+			# Manejar el caso en que no se ha seleccionado ninguna fila
+			print("Error: no se ha seleccionado ninguna fila")
+	
+
+	#Funcion para buscar articulos con verifdicar stock
+	def buscar_articulos_ventas(evento):
+		buscar = ('%'+entry_buscador_ventas.get()+'%','%'+entry_buscador_ventas.get()+'%')
+		tabla = conexion.cursor()
+		sql = "SELECT * FROM articulos WHERE detalle LIKE ? OR categoria_id LIKE (SELECT id FROM categorias WHERE nombre LIKE ?) AND stock >= 1"
+		tabla.execute(sql,buscar)
+		datos_articulos = tabla.fetchall()
+		#borrar tabla
+		for fila in tabla_articulos_ventas.get_children():
+			tabla_articulos_ventas.delete(fila)
+		for dato in datos_articulos:
+			id_categoria = (dato[1],)
+			tabla.execute("SELECT nombre FROM categorias WHERE id=?",id_categoria)
+			datos_categorias = tabla.fetchall()
+			precio = "$"+str(dato[4])
+			detalle = dato[2]
+			if int(dato[3]) > 0:
+				tabla_articulos_ventas.insert("",END,text=dato[0],values=(dato[0],detalle,precio,dato[3]))
+		tabla.close()
+	entry_buscador_ventas.bind("<KeyRelease>",buscar_articulos_ventas)
 		
+	#Boton de Vender
+	boton_vender = ttk.Button(frame_carrito,text="Vender",command=crear_ticket,style='botonNavegacion.TButton')
+	boton_vender.pack(side=RIGHT,pady=10,padx=10)
+	'''aca va el antry total'''
+	entry_total.configure(state="readonly")
+	entry_total.pack(side=RIGHT,pady=10,padx=10)
+	total = ttk.Label(frame_carrito,text="Total: ",style='entradasCrud.TLabel')
+	total.pack(side=RIGHT,pady=10,padx=10)
+	#Etiqueta, entry y boton de cantidad
+	boton_agregar_cantidad = ttk.Button(frame_carrito,text="Agregar",command=determinar_cantidad,style='botonNavegacion.TButton')
+	boton_agregar_cantidad.pack(side=RIGHT,pady=10,padx=(0,300))
+	cantidad_articulos = ttk.Label(frame_carrito,text="Cantidad de articulos: ",style='entradasCrud.TLabel')
+	cantidad_articulos.pack(anchor=W,padx=10,pady=(0,10))
+	#
+	entry_valor_cantidad.pack(anchor=W,padx=10,pady=(0,10))
+	def cargar_articulos_ventas():
+		tabla = conexion.cursor()
+		tabla.execute("SELECT * FROM articulos ")
+		datos = tabla.fetchall()
+		for dato in datos:
+			precio = "$" + str(dato[4])
+			if int(dato[3]) > 0:
+				tabla_articulos_ventas.insert("", END, text=dato[0], values=(dato[0],dato[2], precio, dato[3]))
+		tabla.close()
+	cargar_articulos_ventas()
 
 def crear_ticket():
-	hora_actual = time.strftime("%H:%M:%S")
-	fecha_actual = time.strftime("%d/%m/%Y")
-	nombre_archivo = f"ticket {fecha_actual} {hora_actual}.pdf"
+	global numero_factura,total_venta
+	#Informcacion de la Factura
+	#Info Cliente
+	nombre_cliente = "Pepe"
+	cuit_cliente = "20-12345678-9"
+	denominacion_cliente = "Consumidor Final"
+	ubi_cliente = "Calle 432, Capital Federal"
+	cel_cliente = "1234-1234"
+	#info empresa
+	nombre_empresa = "Electro A"
+	cuit_empresa = "30-12345678-9"
+	ubi_empresa = "Calle 123, Ciudad"
+	cel_empresa = "4321-4321"
+	#Info Factura
+	numero_factura += 1
+	hora_actual = time.strftime("%H%M%S")
+	fecha_actual = time.strftime("%d%m%Y")
+	fecha_factura = time.strftime("%d/%m/%Y")
+	hora_factura = time.strftime("%H:%M:%S")
+	nombre_archivo = f"ticket {fecha_actual} {hora_actual} {numero_factura}.pdf"
+	#Obtener informacion de los articulos del carrito
+	for fila in carrito:
+		nombre_articulo = fila["nombre_carrito"] #0
+		cantidad_articulo = fila["cantidad_carrito"] #1
+		precio_articulo = fila["precio_carrito"] #2
+		subtotal_articulo = fila["subtotal_carrito"] #3
+	# Dibujar el PDF
 	nuevo_pdf = canvas.Canvas(nombre_archivo,pagesize= A4)
 	# lineas X
 	nuevo_pdf.line(20,820,570,820)
 	nuevo_pdf.line(20,20,570,20)
-	nuevo_pdf.line(20,720,570,720)
+	nuevo_pdf.line(20,720,570,720) #linea divisora de encabezado
+	nuevo_pdf.line(20,650,570,650) #Linea divisora de datos cliente
+	nuevo_pdf.line(20,620,570,620) #Linea divisora de datos articulos
+	nuevo_pdf.line(20,100,570,100) #Linea divisora de datos totales
 	# lineas Y
-	nuevo_pdf.line(20,20,20,820)
-	nuevo_pdf.line(570,20,570,820)
-	nuevo_pdf.line(480,720,480,820)
+	nuevo_pdf.line(20,20,20,820) #Linea izquierda
+	nuevo_pdf.line(570,20,570,820) #Linea derecha
+	nuevo_pdf.line(370,720,370,820) #Linea corte encabezado derecha	
+	nuevo_pdf.line(235,720,235,820) #Linea corte encabezado izquierda
+	#Lineas Y divisoras de articulos
+	nuevo_pdf.line(80,650,80,130) #antidad y detalle
+	nuevo_pdf.line(410,650,410,130) #detalle y precio
+	nuevo_pdf.line(490,650,490,100) #precio y subtotal
+	#linea x final articulos
+	nuevo_pdf.line(20,130,570,130) #Linea final articulos
 	
-	nuevo_pdf.setFont('Times-Roman', 20)
-	nuevo_pdf.drawString(50, 780, "Ticket")
+	#Titulo
+	nuevo_pdf.setFont("Helvetica", 30)
+	nuevo_pdf.drawString(250,790,"Factura")
+	nuevo_pdf.drawString(290,740,"A")
+	#Info Empresa
+	nuevo_pdf.setFont("Helvetica", 15)
+	nuevo_pdf.drawString(30,795,"Empresa: "+ nombre_empresa)
+	nuevo_pdf.drawString(30,775,"Cuit: " + cuit_empresa)
+	nuevo_pdf.drawString(30,755,"Ubicacion: " + ubi_empresa)
+	nuevo_pdf.drawString(30,735,"Celular: " +cel_empresa)
+	#Info Cliente
+	nuevo_pdf.setFont("Helvetica", 11)
+	nuevo_pdf.drawString(30,700,"Cliente: "+ nombre_cliente)	
+	nuevo_pdf.drawString(30,680,"Cuit: "+ cuit_cliente)
+	nuevo_pdf.drawString(30,660,"Denominacion: "+ denominacion_cliente)
+	nuevo_pdf.drawString(300,700,"Ubicacion: "+ ubi_cliente)
+	nuevo_pdf.drawString(300,680,"Celular: "+ cel_cliente)
+	# Info Factura
+	nuevo_pdf.drawString(380,795,"N°: "+ str(numero_factura))
+	nuevo_pdf.drawString(380,775,"Fecha: "+ str(fecha_factura))
+	nuevo_pdf.drawString(380,755,"Hora: " + str(hora_factura)+" hs")
+	#Info Articulos
+	nuevo_pdf.setFont("Helvetica", 12)
+	nuevo_pdf.drawString(25,630,"Cantidad:")
+	nuevo_pdf.drawString(85,630,"Detalle:")
+	nuevo_pdf.drawString(420,630,"Precio U.:")
+	nuevo_pdf.drawString(500,630,"Subtotal:")
+	y = 600
+	for producto in carrito:
+		nuevo_pdf.drawString(25,y, str(producto["cantidad_carrito"]))
+		nuevo_pdf.drawString(85,y, str(producto["nombre_carrito"]))
+		#sacamos el iva del producto
+		producto["precio_carrito"] = float(producto["precio_carrito"])
+		precio_sin_iva = producto["precio_carrito"] / 1.21
+		nuevo_pdf.drawString(420,y, str(f"$ {precio_sin_iva:.2f}"))
+		#sacamos el iva del subtotal
+		producto["subtotal_carrito"] = float(producto["subtotal_carrito"])
+		subtotal_sin_iva = producto["subtotal_carrito"] / 1.21
+		nuevo_pdf.drawString(500,y, str(f"$ {subtotal_sin_iva:.2f}"))
+		y -= 20
+		
+	#Final Factura
+	nuevo_pdf.drawString(440,110,"Subtotal:")
+	nuevo_pdf.drawString(500,110,"$ "+ str(f"{total_venta/1.21:.2f}")) #valor subtotal
+	nuevo_pdf.drawString(420,80,"I.V.A. (21%):")
+	nuevo_pdf.drawString(500,80,"$ "+ str(f"{(total_venta/1.21)*0.21:.2f}")) #valor iva
+	nuevo_pdf.drawString(412,60,"Percepciones:")
+	nuevo_pdf.drawString(500,60,"$ 000.00") #valor percepciones
+	nuevo_pdf.setFont("Helvetica-Bold", 12,)
+	nuevo_pdf.drawString(458,30,"Total:")
+	nuevo_pdf.drawString(500,30,"$ "+ str(total_venta)) #valor total
 
+	# carpeta_destino = "D:\TrabajosImportantes\Programa Electro A\Facturas"
+	# ruta_archivo = os.path.join(carpeta_destino, nombre_archivo)
 	nuevo_pdf.save()
-	pass
+	os.startfile( f"{nombre_archivo}")
+	
 
 ventana = Tk()
 misEstilos()
