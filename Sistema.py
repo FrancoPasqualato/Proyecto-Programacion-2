@@ -23,6 +23,7 @@ conexion = sqlite3.connect("BaseElectroA.db")
 total_venta = 0
 carrito = []
 numero_factura = 0
+venta_cancelada = False
 
 #Paleta Colores 1
 Naranja_intenso= '#FF6F00'
@@ -501,6 +502,8 @@ def ventas(frame_contenido):
 	#Frame Encabezado
 	frame_header = ttk.Frame(frame_ventas,style='transparente.TFrame')
 	frame_header.pack(fill=X,ipady=50)
+	label_ventas = ttk.Label(frame_header,text="Ventas",style='titulo.TLabel')
+	label_ventas.pack()
 	#Frame completo
 	frame_body = ttk.Frame(frame_ventas,style='transparente.TFrame')
 	frame_body.pack(fill=BOTH,expand=1)
@@ -541,7 +544,7 @@ def ventas(frame_contenido):
 	tabla_carrito_ventas.column("Subtotal", anchor=W, width=50)
 	tabla_carrito_ventas.heading("#0", text="", anchor=W)
 	tabla_carrito_ventas.heading("nombre", text="Nombre", anchor=CENTER)
-	tabla_carrito_ventas.heading("precio", text="Precio", anchor=CENTER)
+	tabla_carrito_ventas.heading("precio", text="Precio U.", anchor=CENTER)
 	tabla_carrito_ventas.heading("cantidad", text="Cantidad", anchor=CENTER)
 	tabla_carrito_ventas.heading("Subtotal", text="Subtotal", anchor=CENTER)
 
@@ -574,33 +577,63 @@ def ventas(frame_contenido):
 	tabla_articulos_ventas.bind("<<TreeviewSelect>>",seleccionar_articulo_ventas)
 	
 	def determinar_cantidad():
-		global total_venta
+		global total_venta, venta_cancelada
+		venta_cancelada = False
 		fila = tabla_articulos_ventas.selection()
 		if fila:
 			fila = tabla_articulos_ventas.item(fila)
 			nombre = fila["values"][1]
 			precio = fila["values"][2].replace("$","")
 			cantidad = entry_valor_cantidad.get()
+			if not cantidad.strip():
+				cantidad = "1"  # Asignar el valor por defecto como 1
+			elif float(cantidad) > float(fila["values"][3]):
+				messagebox.showerror(title="STOCK INSUFICIENTE",
+							message="NO se cargo el ARTICULO por falta de STOCK",
+							detail=f"Por favor, ingrese una cantidad menor a {fila['values'][3]} ."
+							)
+				return
 			subtotal = int(cantidad) * float(precio)
-			tabla_carrito_ventas.insert("", END, text=nombre, values=(nombre, cantidad, precio, subtotal))
+			cantidad = int(cantidad)
+			precio = float(precio)
+			subtotal = cantidad * precio
+			# Verificar si el producto ya está en el carrito
+			producto_encontrado = False
+			for idx, producto in enumerate(carrito):
+				if producto["nombre_carrito"] == nombre:
+					# Actualizar cantidad y subtotal del producto existente
+					cantidad_actual = int(producto["cantidad_carrito"]) 
+					subtotal_actual = float(producto["subtotal_carrito"]) 
+					# Actualizar cantidad y subtotal del producto existente
+					nueva_cantidad = cantidad_actual + cantidad
+					nuevo_subtotal = subtotal_actual + subtotal
+
+					producto["cantidad_carrito"] = nueva_cantidad
+					producto["subtotal_carrito"] = nuevo_subtotal
+					
+					# Actualizar la tabla
+					item_id = tabla_carrito_ventas.get_children()[idx]
+					tabla_carrito_ventas.item(item_id, values=(nombre,f"${precio:.2f}",nueva_cantidad,f"${nuevo_subtotal:.2f}"))
+					
+					producto_encontrado = True
+					break
+
+			if not producto_encontrado:
+				# Si no está en el carrito, agregarlo como nuevo producto
+				tabla_carrito_ventas.insert("", END, text=nombre, values=(nombre, f"${precio:.2f}", cantidad, f"${subtotal:.2f}"))
+				carrito.append({
+					"nombre_carrito": nombre,
+					"precio_carrito": precio,
+					"cantidad_carrito": cantidad,
+					"subtotal_carrito": subtotal
+				})
+
 			total_venta += subtotal
-			carrito.append({
-				"nombre_carrito":nombre,
-				"cantidad_carrito":cantidad,
-				"precio_carrito":precio,
-				"subtotal_carrito":subtotal
-			})
-			print(carrito)
 			borrar_entrys()
 			entry_total.configure(state="normal")
 			entry_total.delete(0,END)
-			entry_total.insert(0,total_venta)
+			entry_total.insert(0,f"{total_venta:.2f}")
 			entry_total.configure(state="readonly")
-		else:
-			# Manejar el caso en que no se ha seleccionado ninguna fila
-			print("Error: no se ha seleccionado ninguna fila")
-	
-
 	#Funcion para buscar articulos con verifdicar stock
 	def buscar_articulos_ventas(evento):
 		buscar = ('%'+entry_buscador_ventas.get()+'%','%'+entry_buscador_ventas.get()+'%')
@@ -625,14 +658,30 @@ def ventas(frame_contenido):
 	#Boton de Vender
 	boton_vender = ttk.Button(frame_carrito,text="Vender",command=crear_ticket,style='botonNavegacion.TButton')
 	boton_vender.pack(side=RIGHT,pady=10,padx=10)
+	
 	'''aca va el antry total'''
 	entry_total.configure(state="readonly")
 	entry_total.pack(side=RIGHT,pady=10,padx=10)
 	total = ttk.Label(frame_carrito,text="Total: ",style='entradasCrud.TLabel')
 	total.pack(side=RIGHT,pady=10,padx=10)
+
+	def cancelar_cantidad():
+		global venta_cancelada
+		for fila in tabla_carrito_ventas.get_children():
+			tabla_carrito_ventas.delete(fila)
+		entry_total.configure(state="normal")
+		entry_total.delete(0,END)
+		entry_total.configure(state="readonly")
+		carrito.clear()
+		venta_cancelada = True
+		total_venta = 0
+
+	boton_cancelar_cantidad = ttk.Button(frame_carrito,text="Cancelar",command=cancelar_cantidad,style='botonNavegacion.TButton')
+	boton_cancelar_cantidad.pack(side=RIGHT,pady=10,padx=(0,200))
 	#Etiqueta, entry y boton de cantidad
 	boton_agregar_cantidad = ttk.Button(frame_carrito,text="Agregar",command=determinar_cantidad,style='botonNavegacion.TButton')
-	boton_agregar_cantidad.pack(side=RIGHT,pady=10,padx=(0,300))
+	boton_agregar_cantidad.pack(side=RIGHT,pady=10,padx=(0,20))
+	
 	cantidad_articulos = ttk.Label(frame_carrito,text="Cantidad de articulos: ",style='entradasCrud.TLabel')
 	cantidad_articulos.pack(anchor=W,padx=10,pady=(0,10))
 	#
@@ -648,9 +697,25 @@ def ventas(frame_contenido):
 		tabla.close()
 	cargar_articulos_ventas()
 
+#FUNCION para disminuir stock
+def disminuir_stock():
+	tabla = conexion.cursor()
+	for producto in carrito:
+		tabla.execute("UPDATE articulos SET stock = stock - ? WHERE detalle = ?", (producto["cantidad_carrito"], producto["nombre_carrito"]))
+	conexion.commit()
+
+
 def crear_ticket():
-	global numero_factura,total_venta
+	global numero_factura,total_venta,venta_cancelada
+	if venta_cancelada == True:
+		messagebox.showerror(title="Venta CANCELDA",
+							message="No se realizo la venta por cancelacion del carrito",
+							detail="Por favor, inicie una nueva venta o verifique los datos del carrito."
+							)
+		total_venta = 0
+		return
 	#Informcacion de la Factura
+	disminuir_stock()
 	#Info Cliente
 	nombre_cliente = "Pepe"
 	cuit_cliente = "20-12345678-9"
@@ -746,7 +811,14 @@ def crear_ticket():
 	nuevo_pdf.drawString(500,60,"$ 000.00") #valor percepciones
 	nuevo_pdf.setFont("Helvetica-Bold", 12,)
 	nuevo_pdf.drawString(458,30,"Total:")
-	nuevo_pdf.drawString(500,30,"$ "+ str(total_venta)) #valor total
+	nuevo_pdf.drawString(500,30,"$ "+ str(f"{total_venta:.2f}")) #valor total
+	
+	#Limpiar tabla carrito
+	carrito.clear()
+	total_venta = 0
+
+	print(carrito)
+	print(total_venta)
 
 	# carpeta_destino = "D:\TrabajosImportantes\Programa Electro A\Facturas"
 	# ruta_archivo = os.path.join(carpeta_destino, nombre_archivo)
